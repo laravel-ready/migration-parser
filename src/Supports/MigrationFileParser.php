@@ -11,11 +11,15 @@ use PhpParser\ParserFactory;
 use PhpParser\PrettyPrinter;
 use PhpParser\Node\Stmt\Use_;
 use PhpParser\Node\Stmt\Class_;
-use PhpParser\Node\Stmt\Return_;
-use PhpParser\Node\Stmt\ClassMethod;
 use PhpParser\Node\Stmt\UseUse;
+use PhpParser\Node\Stmt\Return_;
+use PhpParser\Node\Scalar\String_;
+use PhpParser\Node\Arg;
 use PhpParser\NodeVisitorAbstract;
+use PhpParser\Node\Stmt\Expression;
+use PhpParser\Node\Expr\StaticCall;
 use PhpParser\Node\Stmt\Namespace_;
+use PhpParser\Node\Stmt\ClassMethod;
 use Illuminate\Filesystem\Filesystem;
 use Illuminate\Support\Facades\Config;
 use LaravelReady\MigrationParser\Exceptions\PhpParseException;
@@ -107,7 +111,7 @@ class MigrationFileParser
         $methods = $this->getMethods();
 
         if ($methods) {
-            return array_filter($methods, fn ($method) => $method->name->toString() === 'up');
+            return array_filter($methods, fn ($method) => $method->name->toString() === 'up')[0] ?? null;
         }
 
         return null;
@@ -118,7 +122,45 @@ class MigrationFileParser
         $methods = $this->getMethods();
 
         if ($methods) {
-            return array_filter($methods, fn ($method) => $method->name->toString() === 'down');
+            return array_filter($methods, fn ($method) => $method->name->toString() === 'down')[0] ?? null;
+        }
+
+        return null;
+    }
+
+    public function getSchemas(): mixed
+    {
+        $upMethod = $this->getUpMethod();
+
+        if ($upMethod) {
+            // get only schema builder and create calls
+            $schemeExpressions = array_filter(
+                $upMethod?->stmts,
+                fn ($item) => $item instanceof Expression
+                    && $item->expr?->class?->toString() === 'Schema'
+                    && $item->expr?->name?->toString() === 'create'
+            );
+
+            $tables = array_map(
+                function ($item) {
+                    $data = [
+                        'object' => $item
+                    ];
+
+                    if (isset($item->expr->args[0]->value) && $item->expr->args[0]->value instanceof String_) {
+                        $data['table_name'] = $item->expr->args[0]->value->value;
+
+                        return $data;
+                    }
+
+                    return null;
+                },
+                $schemeExpressions
+            );
+
+            $tables = array_values(array_filter($tables, fn ($item) => $item));
+
+            return $tables;
         }
 
         return null;
