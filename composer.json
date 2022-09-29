@@ -6,8 +6,8 @@
   "version": "1.0.0",
   "keywords": [
     "laravel migrations",
-    " migration parser",
-    " migration"
+    "migration parser",
+    "migration"
   ],
   "authors": [
     {
@@ -21,7 +21,8 @@
   },
   "require": {
     "php": "^8.0",
-    "illuminate/support": "^9.0"
+    "illuminate/support": "^9.0",
+    "nikic/php-parser": "4.15"
   },
   "require-dev": {
     "mockery/mockery": "^1.4",
@@ -49,7 +50,8 @@
     "preferred-install": "dist",
     "sort-packages": true,
     "allow-plugins": {
-      "pestphp/pest-plugin": true
+      "pestphp/pest-plugin": true,
+      "phpstan/extension-installer": true
     }
   },
   "scripts": {
