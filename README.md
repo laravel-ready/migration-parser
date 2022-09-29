@@ -9,7 +9,7 @@
 
 ## 📂 About
 
-Laravel migration file parser...
+Laravel migration file parser core package.
 
 
 ## 📦 Installation
