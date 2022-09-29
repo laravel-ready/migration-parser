@@ -1,6 +1,6 @@
-# yes
+# Migration Parser
 
-[![yes](https://preview.dragon-code.pro/LaravelReady/migration-parser.svg?brand=laravel)](https://github.com/laravel-ready/migration-parser)
+[![Migration Parser](https://preview.dragon-code.pro/LaravelReady/migration-parser.svg?brand=laravel)](https://github.com/laravel-ready/migration-parser)
 
 [![Stable Version][badge_stable]][link_packagist]
 [![Unstable Version][badge_unstable]][link_packagist]
