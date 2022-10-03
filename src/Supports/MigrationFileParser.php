@@ -134,33 +134,12 @@ class MigrationFileParser
 
         if ($upMethod) {
             // get only schema builder and create calls
-            $schemeExpressions = array_filter(
-                $upMethod?->stmts,
-                fn ($item) => $item instanceof Expression
-                    && $item->expr?->class?->toString() === 'Schema'
-                    && $item->expr?->name?->toString() === 'create'
-            );
+            $schemeExpressions = $upMethod?->stmts;
 
-            $tables = array_map(
-                function ($item) {
-                    $data = [
-                        'object' => $item
-                    ];
+            $schemas = array_map(fn ($item) => (new SchemaParser($item))->parse(), $schemeExpressions);
+            $schemas = array_filter($schemas, fn ($item) => $item && $item->tableName !== null);
 
-                    if (isset($item->expr->args[0]->value) && $item->expr->args[0]->value instanceof String_) {
-                        $data['table_name'] = $item->expr->args[0]->value->value;
-
-                        return $data;
-                    }
-
-                    return null;
-                },
-                $schemeExpressions
-            );
-
-            $tables = array_values(array_filter($tables, fn ($item) => $item));
-
-            return $tables;
+            return $schemas;
         }
 
         return null;

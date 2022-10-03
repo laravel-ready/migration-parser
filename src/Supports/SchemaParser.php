@@ -1,0 +1,133 @@
+<?php
+
+namespace LaravelReady\MigrationParser\Supports;
+
+use PhpParser\Node;
+use PhpParser\Error;
+use ReflectionClass;
+use PhpParser\Parser;
+use ReflectionMethod;
+use PhpParser\Node\Arg;
+use PhpParser\Node\Name;
+use PhpParser\NodeTraverser;
+use PhpParser\ParserFactory;
+use PhpParser\PrettyPrinter;
+use PhpParser\Node\Stmt\Use_;
+use PhpParser\Node\Stmt\Class_;
+use PhpParser\Node\Stmt\UseUse;
+use PhpParser\Node\Expr\Closure;
+use PhpParser\Node\Stmt\Return_;
+use PhpParser\Node\Expr\Variable;
+use PhpParser\Node\Scalar\String_;
+use PhpParser\NodeVisitorAbstract;
+use PhpParser\Node\Expr\StaticCall;
+use PhpParser\Node\Identifier;
+use PhpParser\Node\Stmt\Expression;
+use PhpParser\Node\Stmt\Namespace_;
+use PhpParser\Node\Stmt\ClassMethod;
+use Illuminate\Support\Facades\Config;
+use Illuminate\Database\Schema\Blueprint;
+use LaravelReady\MigrationParser\Exceptions\PhpParseException;
+
+class SchemaParser
+{
+    private ?object $baseExpression = null;
+
+    public bool $isTableNameStatic = false;
+    public bool $isTableCreateExpression = false;
+    public ?string $tableName = null;
+    public ?string $initialExpression = null;
+    public ?string $blueprintVariableName = null;
+    public array $expressionList = [];
+
+    public function __construct(object $schemeExpressions)
+    {
+        $this->baseExpression = $schemeExpressions->expr;
+    }
+
+    /**
+     * Parse schema code and extract required information.
+     * 
+     * $this->baseExpression->expr->args[0] is the first argument of the Schema::method(xxx, ...) context.
+     * $this->baseExpression->expr->args[1] is the second argument of the Schema::method(..., xxx) context.
+     */
+    public function parse(): self
+    {
+        // check table name
+        if (isset($this->baseExpression->args[0]->value)) {
+            // some table names are can be dynamic, so we need to check if it is static or not
+            // like this: Schema::create(Config::get('package-alias.config_name' . 'table_name'), function (Blueprint $table) {
+            $this->isTableNameStatic = $this->baseExpression->args[0]->value instanceof String_;
+
+            // ignore dynamic table names, we can not parse them for now
+            if ($this->isTableNameStatic) {
+                $this->tableName = $this->baseExpression->args[0]->value->value;
+
+                $this->parseSchemaExpression();
+            }
+        }
+
+        // check blueprint variable
+        if (isset($this->baseExpression->args[1]->value) && $this->baseExpression->args[1]->value instanceof Closure) {
+            $params = $this->baseExpression->args[1]->value->params;
+
+            if (count($params) > 0 && $params[0]->type instanceof Name && $params[0]->type->toString() === 'Blueprint') {
+                // get blueprint variable name
+                $this->blueprintVariableName = $params[0]->var instanceof Variable ? $params[0]->var->name : null;
+
+                if ($this->blueprintVariableName) {
+                    $this->parseTable($this->baseExpression->args[1]->value->stmts, $this->blueprintVariableName);
+                }
+            }
+        }
+
+        return $this;
+    }
+
+    /**
+     * Parse the initial schema expression
+     * 
+     * Example: "Schema::create('table_name', function (Blueprint $table)..." return "create"
+     */
+    private function parseSchemaExpression(): void
+    {
+        // check if this is a create table expression
+        if ($this->baseExpression instanceof StaticCall) {
+            if (
+                $this->baseExpression?->class instanceof Name
+                && $this->baseExpression?->class?->parts[0] === 'Schema'
+            ) {
+                $this->initialExpression = $this->baseExpression?->name?->name;
+
+                $this->isTableCreateExpression = $this->initialExpression === 'create';
+            }
+        }
+    }
+
+    private function parseTable(array $tableFields, string $tableVariableName): void
+    {
+        if ($tableVariableName && $tableFields && is_array($tableFields) && count($tableFields)) {
+            $blueprintMethods = $this->getBlueprintPublicMethodNames();
+
+            // dd($tableFields, $blueprintMethods);
+
+            foreach ($tableFields as $key => $tableField) {
+                $this->expressionList[$key] = $this->parseField($tableField->expr, $tableVariableName, $blueprintMethods);
+            }
+        }
+    }
+
+
+    private function parseField(object $fieldExpression, string $tableVariableName, array $blueprintMethods): void
+    {
+        $fieldExpressions = [];
+    }
+
+    private function getBlueprintPublicMethodNames(): array
+    {
+        $blueprintClassReflection = new ReflectionClass('Blueprint');
+        $allMethods = $blueprintClassReflection->getMethods(ReflectionMethod::IS_PUBLIC);
+
+        return array_map(fn (ReflectionMethod $item) => $item->name, $allMethods);
+    }
+}
