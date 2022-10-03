@@ -9,10 +9,12 @@ use PhpParser\Parser;
 use ReflectionMethod;
 use PhpParser\Node\Arg;
 use PhpParser\Node\Name;
+use Illuminate\Support\Str;
 use PhpParser\NodeTraverser;
 use PhpParser\ParserFactory;
 use PhpParser\PrettyPrinter;
 use PhpParser\Node\Stmt\Use_;
+use PhpParser\Node\Identifier;
 use PhpParser\Node\Stmt\Class_;
 use PhpParser\Node\Stmt\UseUse;
 use PhpParser\Node\Expr\Closure;
@@ -20,8 +22,8 @@ use PhpParser\Node\Stmt\Return_;
 use PhpParser\Node\Expr\Variable;
 use PhpParser\Node\Scalar\String_;
 use PhpParser\NodeVisitorAbstract;
+use PhpParser\Node\Expr\MethodCall;
 use PhpParser\Node\Expr\StaticCall;
-use PhpParser\Node\Identifier;
 use PhpParser\Node\Stmt\Expression;
 use PhpParser\Node\Stmt\Namespace_;
 use PhpParser\Node\Stmt\ClassMethod;
@@ -47,7 +49,7 @@ class SchemaParser
 
     /**
      * Parse schema code and extract required information.
-     * 
+     *
      * $this->baseExpression->expr->args[0] is the first argument of the Schema::method(xxx, ...) context.
      * $this->baseExpression->expr->args[1] is the second argument of the Schema::method(..., xxx) context.
      */
@@ -86,7 +88,7 @@ class SchemaParser
 
     /**
      * Parse the initial schema expression
-     * 
+     *
      * Example: "Schema::create('table_name', function (Blueprint $table)..." return "create"
      */
     private function parseSchemaExpression(): void
@@ -111,16 +113,134 @@ class SchemaParser
 
             // dd($tableFields, $blueprintMethods);
 
+            $excludedDataKeys = [
+                'startLine',
+                'endLine',
+                'line',
+                'endFilePos',
+                'startFilePos',
+                'filePos',
+                'kind',
+                'byRef',
+                'unpack',
+                'text',
+            ];
+
             foreach ($tableFields as $key => $tableField) {
-                $this->expressionList[$key] = $this->parseField($tableField->expr, $tableVariableName, $blueprintMethods);
+                $arrayFieldTree = json_decode(json_encode($tableField->expr), true);
+                $flattenArrayTree = $this->arrayFlatten($arrayFieldTree);
+
+                $queryItems = array_map(function ($item) {
+                    return [
+                        'key' => array_keys($item)[0],
+                        'value' => array_values($item)[0],
+                    ];
+                }, $flattenArrayTree);
+
+                // filter out the data we don't need
+                $queryItems = array_filter($queryItems, function ($item) use ($excludedDataKeys) {
+                    return is_array($item) // array required
+                        && !in_array($item['key'], $excludedDataKeys) // exclude some keys
+                        && !empty($item['value']); // exclude empty values
+                }, ARRAY_FILTER_USE_BOTH);
+
+                // reset array keys
+                $queryItems = array_values($queryItems);
+
+                // again, filter out the data we don't need
+                $queryItems = array_filter(
+                    $queryItems,
+                    function ($item, $i) use ($queryItems) {
+                        $nextItemArrayKey = $queryItems[$i + 1]['key'] ?? null;
+                        $previousItemArrayKey = $queryItems[$i - 1]['key'] ?? null;
+
+                        return $item['key'] !== $nextItemArrayKey // exclude sequential keys
+                            && !($item['key'] === 'value' && $previousItemArrayKey === 'rawValue'); // keep only rawValue
+                    },
+                    ARRAY_FILTER_USE_BOTH
+                );
+
+                // reset array keys
+                $queryItems = array_values($queryItems);
             }
+
+            dd($this->expressionList);
         }
     }
 
 
-    private function parseField(object $fieldExpression, string $tableVariableName, array $blueprintMethods): void
+    private function parseField(array $fieldExpressions): mixed
     {
-        $fieldExpressions = [];
+        $query = '';
+
+        foreach ($fieldExpressions as $key => $fieldExpression) {
+            $currentItemArrayKey = $fieldExpression['key'];
+            $currentItemArrayValue = $fieldExpression['value'];
+
+            $nextItemArrayKey = $fieldExpressions[$key + 1]['key'] ?? null;
+            $nextItemArrayValue = $fieldExpressions[$key + 1]['value'] ?? null;
+
+            $next2ItemArrayKey = $fieldExpressions[$key + 2]['key'] ?? null;
+            $next2ItemArrayValue = $fieldExpressions[$key + 2]['value'] ?? null;
+
+            $next3ItemArrayKey = $fieldExpressions[$key + 3]['key'] ?? null;
+            $next3ItemArrayValue = $fieldExpressions[$key + 3]['value'] ?? null;
+
+            if ($currentItemArrayKey == 'nodeType') {
+                if ($currentItemArrayValue == 'Expr_Variable' && $nextItemArrayKey == 'name') {
+                    $query .= "\${$nextItemArrayValue}->";
+                } else if ($currentItemArrayValue == 'Identifier' && $nextItemArrayKey == 'name') {
+                    $query .= "{$nextItemArrayValue}(";
+
+                    if ($nextItemArrayKey === 'name' && $nextItemArrayValue === 'default') {
+                        $query .= "{$next3ItemArrayValue}";
+                    }
+
+                    if (!($next2ItemArrayKey == 'nodeType' && Str::startsWith($next2ItemArrayValue, 'Scalar_'))) {
+                        $query .= ')->';
+                    }
+                } else if (Str::startsWith($currentItemArrayValue, 'Scalar_')) {
+                    if (Str::endsWith($query, '\'') || !Str::endsWith($query, '(') || !Str::endsWith($query, ')') || !Str::endsWith($query, '->')) {
+                        $query .= ', ';
+                    }
+
+                    $query .= "{$nextItemArrayValue}";
+
+                    if ($next2ItemArrayValue == 'Identifier' && $next3ItemArrayKey == 'name') {
+                        $query .= ')->';
+                    }
+                }
+            }
+
+            if ($key == count($fieldExpressions) - 1) {
+                if ($currentItemArrayKey === 'rawValue' || $currentItemArrayKey === '0') {
+                    $query .= ');';
+                } else if ($currentItemArrayKey === 'name') {
+                    $query =  rtrim($query, '->') . ');';
+                }
+            }
+        }
+
+        $query = Str::replace("(, '", "('", $query);
+        $query = Str::replace("(, \"", "(\"", $query);
+        $query = Str::replace("));", ");", $query);
+
+        if (Str::endsWith($query, '->')) {
+            $query = rtrim($query, '->') . ';';
+        }
+
+        return $query;
+    }
+
+    private function arrayFlatten(array $array): array
+    {
+        $return = [];
+
+        array_walk_recursive($array, function ($a, $b) use (&$return) {
+            $return[] = [$b => $a];
+        });
+
+        return $return;
     }
 
     private function getBlueprintPublicMethodNames(): array
