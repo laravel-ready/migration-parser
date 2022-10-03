@@ -28,7 +28,6 @@ use PhpParser\Node\Stmt\Expression;
 use PhpParser\Node\Stmt\Namespace_;
 use PhpParser\Node\Stmt\ClassMethod;
 use Illuminate\Support\Facades\Config;
-use Illuminate\Database\Schema\Blueprint;
 use LaravelReady\MigrationParser\Exceptions\PhpParseException;
 
 class SchemaParser
@@ -106,13 +105,9 @@ class SchemaParser
         }
     }
 
-    private function parseTable(array $tableFields, string $tableVariableName): void
+    private function parseTable(array $tableFields, string $tableVariableName)
     {
         if ($tableVariableName && $tableFields && is_array($tableFields) && count($tableFields)) {
-            $blueprintMethods = $this->getBlueprintPublicMethodNames();
-
-            // dd($tableFields, $blueprintMethods);
-
             $excludedDataKeys = [
                 'startLine',
                 'endLine',
@@ -162,9 +157,9 @@ class SchemaParser
 
                 // reset array keys
                 $queryItems = array_values($queryItems);
-            }
 
-            dd($this->expressionList);
+                $this->expressionList[$key] = $this->parseField($queryItems);
+            }
         }
     }
 
@@ -241,13 +236,5 @@ class SchemaParser
         });
 
         return $return;
-    }
-
-    private function getBlueprintPublicMethodNames(): array
-    {
-        $blueprintClassReflection = new ReflectionClass('Blueprint');
-        $allMethods = $blueprintClassReflection->getMethods(ReflectionMethod::IS_PUBLIC);
-
-        return array_map(fn (ReflectionMethod $item) => $item->name, $allMethods);
     }
 }
