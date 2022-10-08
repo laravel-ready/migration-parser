@@ -6,27 +6,46 @@ use Illuminate\Support\Str;
 
 class FieldParser
 {
+    public ?string $queryString = null;
+    private array $queryItems = [];
+
     /**
-     * Parse the table field
-     * 
      * @param array $queryItems
      */
-    public function parse(array $queryItems): mixed
+    public function __construct(array $queryItems)
+    {
+        $this->queryItems = $queryItems;
+
+        $this->stringfyQuery();
+    }
+
+    /**
+     * Parse the table field
+     */
+    public function parse(): self
+    {
+        return $this;
+    }
+
+    /**
+     * Stringfy the query
+     */
+    public function stringfyQuery(): void
     {
         $query = '';
 
-        foreach ($queryItems as $key => $queryItem) {
+        foreach ($this->queryItems as $key => $queryItem) {
             $currentItemArrayKey = $queryItem['key'];
             $currentItemArrayValue = $queryItem['value'];
 
-            $nextItemArrayKey = $queryItems[$key + 1]['key'] ?? null;
-            $nextItemArrayValue = $queryItems[$key + 1]['value'] ?? null;
+            $nextItemArrayKey = $this->queryItems[$key + 1]['key'] ?? null;
+            $nextItemArrayValue = $this->queryItems[$key + 1]['value'] ?? null;
 
-            $next2ItemArrayKey = $queryItems[$key + 2]['key'] ?? null;
-            $next2ItemArrayValue = $queryItems[$key + 2]['value'] ?? null;
+            $next2ItemArrayKey = $this->queryItems[$key + 2]['key'] ?? null;
+            $next2ItemArrayValue = $this->queryItems[$key + 2]['value'] ?? null;
 
-            $next3ItemArrayKey = $queryItems[$key + 3]['key'] ?? null;
-            $next3ItemArrayValue = $queryItems[$key + 3]['value'] ?? null;
+            $next3ItemArrayKey = $this->queryItems[$key + 3]['key'] ?? null;
+            $next3ItemArrayValue = $this->queryItems[$key + 3]['value'] ?? null;
 
             if ($currentItemArrayKey == 'nodeType') {
                 if ($currentItemArrayValue == 'Expr_Variable' && $nextItemArrayKey == 'name') {
@@ -54,7 +73,7 @@ class FieldParser
                 }
             }
 
-            if ($key == count($queryItems) - 1) {
+            if ($key == count($this->queryItems) - 1) {
                 if ($currentItemArrayKey === 'rawValue' || $currentItemArrayKey === '0') {
                     $query .= ');';
                 } else if ($currentItemArrayKey === 'name') {
@@ -71,6 +90,6 @@ class FieldParser
             $query = rtrim($query, '->') . ';';
         }
 
-        return $query;
+        $this->queryString = $query;
     }
 }

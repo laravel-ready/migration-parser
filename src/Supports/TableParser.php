@@ -68,9 +68,9 @@ class TableParser
                 // reset array keys
                 $queryItems = array_values($queryItems);
 
-                $fieldParser = new FieldParser();
+                $fieldParser = new FieldParser($queryItems);
 
-                $this->expressionList[$key] = $fieldParser->parse($queryItems);
+                $this->expressionList[$key] = $fieldParser->parse();
             }
 
             return $this;
