@@ -28,6 +28,7 @@ use PhpParser\Node\Stmt\Expression;
 use PhpParser\Node\Stmt\Namespace_;
 use PhpParser\Node\Stmt\ClassMethod;
 use Illuminate\Support\Facades\Config;
+use LaravelReady\MigrationParser\Helpers\CommonHelpers;
 use LaravelReady\MigrationParser\Exceptions\PhpParseException;
 
 class SchemaParser
@@ -43,7 +44,7 @@ class SchemaParser
 
     public function __construct(object $schemeExpressions)
     {
-        $this->baseExpression = $schemeExpressions->expr;
+        $this->baseExpression = $schemeExpressions->expr ?? null;
     }
 
     /**
@@ -105,9 +106,15 @@ class SchemaParser
         }
     }
 
-    private function parseTable(array $tableFields, string $tableVariableName)
+    /**
+     * Parse the table query
+     * 
+     * @param array $tableFields
+     * @param string $blueprintVariableName
+     */
+    private function parseTable(array $tableFields, string $blueprintVariableName)
     {
-        if ($tableVariableName && $tableFields && is_array($tableFields) && count($tableFields)) {
+        if ($blueprintVariableName && $tableFields && is_array($tableFields) && count($tableFields)) {
             $excludedDataKeys = [
                 'startLine',
                 'endLine',
@@ -123,8 +130,9 @@ class SchemaParser
 
             foreach ($tableFields as $key => $tableField) {
                 $arrayFieldTree = json_decode(json_encode($tableField->expr), true);
-                $flattenArrayTree = $this->arrayFlatten($arrayFieldTree);
+                $flattenArrayTree = CommonHelpers::arrayFlatten($arrayFieldTree);
 
+                // convert to key value pairs
                 $queryItems = array_map(function ($item) {
                     return [
                         'key' => array_keys($item)[0],
@@ -163,23 +171,27 @@ class SchemaParser
         }
     }
 
-
-    private function parseField(array $fieldExpressions): mixed
+    /**
+     * Parse the table field
+     * 
+     * @param array $queryItems
+     */
+    private function parseField(array $queryItems): mixed
     {
         $query = '';
 
-        foreach ($fieldExpressions as $key => $fieldExpression) {
-            $currentItemArrayKey = $fieldExpression['key'];
-            $currentItemArrayValue = $fieldExpression['value'];
+        foreach ($queryItems as $key => $queryItem) {
+            $currentItemArrayKey = $queryItem['key'];
+            $currentItemArrayValue = $queryItem['value'];
 
-            $nextItemArrayKey = $fieldExpressions[$key + 1]['key'] ?? null;
-            $nextItemArrayValue = $fieldExpressions[$key + 1]['value'] ?? null;
+            $nextItemArrayKey = $queryItems[$key + 1]['key'] ?? null;
+            $nextItemArrayValue = $queryItems[$key + 1]['value'] ?? null;
 
-            $next2ItemArrayKey = $fieldExpressions[$key + 2]['key'] ?? null;
-            $next2ItemArrayValue = $fieldExpressions[$key + 2]['value'] ?? null;
+            $next2ItemArrayKey = $queryItems[$key + 2]['key'] ?? null;
+            $next2ItemArrayValue = $queryItems[$key + 2]['value'] ?? null;
 
-            $next3ItemArrayKey = $fieldExpressions[$key + 3]['key'] ?? null;
-            $next3ItemArrayValue = $fieldExpressions[$key + 3]['value'] ?? null;
+            $next3ItemArrayKey = $queryItems[$key + 3]['key'] ?? null;
+            $next3ItemArrayValue = $queryItems[$key + 3]['value'] ?? null;
 
             if ($currentItemArrayKey == 'nodeType') {
                 if ($currentItemArrayValue == 'Expr_Variable' && $nextItemArrayKey == 'name') {
@@ -207,7 +219,7 @@ class SchemaParser
                 }
             }
 
-            if ($key == count($fieldExpressions) - 1) {
+            if ($key == count($queryItems) - 1) {
                 if ($currentItemArrayKey === 'rawValue' || $currentItemArrayKey === '0') {
                     $query .= ');';
                 } else if ($currentItemArrayKey === 'name') {
@@ -225,16 +237,5 @@ class SchemaParser
         }
 
         return $query;
-    }
-
-    private function arrayFlatten(array $array): array
-    {
-        $return = [];
-
-        array_walk_recursive($array, function ($a, $b) use (&$return) {
-            $return[] = [$b => $a];
-        });
-
-        return $return;
     }
 }
