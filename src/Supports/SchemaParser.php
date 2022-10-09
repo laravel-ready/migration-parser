@@ -76,8 +76,8 @@ class SchemaParser
         // check if this is a create table expression
         if ($this->baseExpression instanceof StaticCall) {
             if (
-                $this->baseExpression?->class instanceof Name
-                && $this->baseExpression?->class?->parts[0] === 'Schema'
+                ($this->baseExpression?->class instanceof Name)
+                && ($this->baseExpression?->class?->parts[0] === 'Schema')
             ) {
                 $this->initialExpression = $this->baseExpression?->name?->name;
 

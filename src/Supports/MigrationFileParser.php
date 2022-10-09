@@ -42,9 +42,12 @@ class MigrationFileParser
     /**
      * Get the migration class name from the migration file.
      * This method only returns first class name in the file.
-     * 
+     *
      * @param string $migrationFilePath
+     *
      * @return self
+     * @throws PhpParseException
+     * @throws \Illuminate\Contracts\Filesystem\FileNotFoundException
      */
     public function parse(string $migrationFilePath): self
     {
@@ -157,8 +160,10 @@ class MigrationFileParser
         if ($this->migrationClass) {
             if ($this->migrationClass instanceof Class_) {
                 $methods = $this->migrationClass->stmts;
-            } else if ($this->migrationClass instanceof Return_) {
-                $methods = $this->migrationClass?->expr?->class?->stmts;
+            } else {
+                if ($this->migrationClass instanceof Return_) {
+                    $methods = $this->migrationClass?->expr?->class?->stmts;
+                }
             }
 
             $methods = array_values(

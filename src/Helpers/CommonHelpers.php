@@ -23,4 +23,21 @@ class CommonHelpers extends Exception
 
         return $return;
     }
+
+    /**
+     * Get uniuqe values from an array
+     * 
+     * @param array $array
+     * 
+     * @return array
+     */
+    public static function multidimensionalUnique(array $input): array
+    {
+        $output = array_map(
+            "unserialize",
+            array_unique(array_map("serialize", $input))
+        );
+
+        return $output;
+    }
 }
